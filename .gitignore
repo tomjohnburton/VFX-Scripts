@@ -1,0 +1,8 @@
+*.mov
+*.mp4
+*.png
+*.jpg
+.DS_Store
+task_carousel_v2/
+Stills/
+node_modules/
