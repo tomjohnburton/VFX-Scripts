@@ -1,0 +1,25 @@
+{
+  "name": "microwave",
+  "composition": "SubgoalBuilderV2",
+  "steps": [
+    {
+      "prompt": "Open the microwave",
+      "image": "World Model Vis_01_01_01_18.jpg",
+      "typeStart": 7,
+      "complete": 17
+    },
+    {
+      "prompt": "Pick up the burrito in the microwave",
+      "image": "pick_up_burrito.jpg",
+      "typeStart": 18,
+      "complete": 27
+    },
+    {
+      "prompt": "Place burrito on the table",
+      "image": "place_burrito.jpg",
+      "typeStart": 28,
+      "complete": 35
+    }
+  ],
+  "fadeStart": 45
+}

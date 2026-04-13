@@ -1,8 +1,9 @@
-*.mov
-*.mp4
-*.png
-*.jpg
-.DS_Store
-task_carousel_v2/
-Stills/
 node_modules/
+out/
+.DS_Store
+
+# Allow assets checked into public/
+!public/*.jpg
+!public/*.png
+!public/*.mov
+!public/*.mp4
