@@ -6,18 +6,18 @@
       "prompt": "Grasp the handle of the air fryer with the left gripper",
       "image": "sweet_potato_grasp_handle.jpg",
       "typeStart": 1,
-      "complete": 8
+      "complete": 5
     },
     {
       "prompt": "Open the air fryer",
       "image": "sweet_potato_air_fryer_open.jpg",
-      "typeStart": 9,
-      "complete": 11
+      "typeStart": 6,
+      "complete": 10
     },
     {
       "prompt": "Pick up the sweet potato with the right gripper",
       "image": "sweet_potato_right_gripper.jpg",
-      "typeStart": 12,
+      "typeStart": 13,
       "complete": 21
     },
     {

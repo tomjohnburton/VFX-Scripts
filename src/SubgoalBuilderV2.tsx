@@ -30,8 +30,13 @@ const IMG_W = BOX_W - 80;
 const IMG_H = Math.round(IMG_W * (9 / 16));
 // Extra bottom padding so text clears the overlapping prompt box (see CARD_OVERLAP).
 const CARD_BOTTOM_PAD = 72 + 48;
+// Textual subgoal: up to 2 lines at fontSize 56 × lineHeight 1.25 = 70px per line.
+const TEXT_FONT_SIZE = 56;
+const TEXT_LINE_HEIGHT = 1.25;
+const TEXT_MAX_LINES = 2;
+const TEXT_BLOCK_H = Math.ceil(TEXT_FONT_SIZE * TEXT_LINE_HEIGHT) * TEXT_MAX_LINES;
 // padding + label + gap + image + gap + divider + label + text + padding
-const CARD_H = 36 + 48 + 18 + IMG_H + 24 + 1 + 28 + 56 + 56 + CARD_BOTTOM_PAD;
+const CARD_H = 36 + 48 + 18 + IMG_H + 24 + 1 + 28 + 56 + TEXT_BLOCK_H + CARD_BOTTOM_PAD;
 
 export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeStart }) => {
   const frame = useCurrentFrame();
@@ -43,14 +48,16 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
   // --- Per-step timings ---
   // Each step: type → enter → drawer opens → card visible → complete → drawer closes.
   // Monotonicity guards: each phase at least 1 frame, complete ≥ drawerOpenEnd + reveal.
+  // Compressed so the image is fully revealed by typeStart + 3.0s:
+  //   type 0.9s → enter 1.1s → drawerOpen 1.3s → drawerOpenEnd 1.7s → revealEnd 3.0s (1.3s window)
   const stepTimings = steps.map((s) => {
     const typeStart = sec(s.typeStart);
-    const typeEnd = typeStart + sec(1.8);
-    const enter = typeStart + sec(2.4);
-    const drawerOpenStart = typeStart + sec(2.8);
-    const drawerOpenEnd = drawerOpenStart + sec(0.6);
+    const typeEnd = typeStart + sec(0.9);
+    const enter = typeStart + sec(1.1);
+    const drawerOpenStart = typeStart + sec(1.3);
+    const drawerOpenEnd = drawerOpenStart + sec(0.4);
     const requested = sec(s.complete);
-    const minComplete = drawerOpenEnd + sec(1.0);
+    const minComplete = drawerOpenEnd + sec(1.3);
     const complete = Math.max(requested, minComplete);
     const drawerCloseStart = complete + sec(0.9);
     const drawerCloseEnd = drawerCloseStart + sec(0.35);
@@ -116,53 +123,70 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
   return (
     <AbsoluteFill style={{ fontFamily: FONT, opacity: finalFade }}>
 
-      {/* === Drawer: one card at a time, emerges from top of prompt box === */}
-      {steps.map((step, i) => {
-        const cst = stepTimings[i];
-        if (frame < cst.drawerOpenStart || frame >= cst.drawerCloseEnd) return null;
+      {/* === Drawer: opens once, persists across steps; content swaps inside === */}
+      {(() => {
+        const firstOpen = stepTimings[0];
+        const lastStep = stepTimings[stepTimings.length - 1];
+        const globalCloseStart = lastStep.complete + sec(0.9);
+        const globalCloseEnd = globalCloseStart + sec(0.35);
 
-        // Drawer progress: 0 = closed (hidden), 1 = fully open
+        if (frame < firstOpen.drawerOpenStart || frame >= globalCloseEnd) return null;
+
+        // Global drawer open/close — only animates at the very start and end.
         let drawerProgress: number;
-        if (frame < cst.drawerOpenEnd) {
-          // Opening
-          const raw = spring({ frame: frame - cst.drawerOpenStart, fps, config: { damping: 22, stiffness: 130 } });
+        if (frame < firstOpen.drawerOpenEnd) {
+          const raw = spring({ frame: frame - firstOpen.drawerOpenStart, fps, config: { damping: 22, stiffness: 130 } });
           drawerProgress = Math.min(1, Math.max(0, raw));
-        } else if (frame < cst.drawerCloseStart) {
+        } else if (frame < globalCloseStart) {
           drawerProgress = 1;
         } else {
-          // Closing (quick)
-          drawerProgress = interpolate(frame, [cst.drawerCloseStart, cst.drawerCloseEnd], [1, 0], clamp);
+          drawerProgress = interpolate(frame, [globalCloseStart, globalCloseEnd], [1, 0], clamp);
         }
-
         const translateY = (1 - drawerProgress) * CARD_H;
 
-        // Mosaic image reveal: fixed ~0.7s window, starts right after drawer opens.
-        // Decoupled from `complete` so long steps don't stretch the animation.
-        const revealEnd = Math.min(cst.drawerOpenEnd + sec(0.7), cst.complete);
-        const revealProgress = interpolate(frame, [cst.drawerOpenEnd, revealEnd], [0, 1], clamp);
+        // Active step: latest whose drawerOpenStart has passed.
+        let cardIdx = 0;
+        for (let i = stepTimings.length - 1; i >= 0; i--) {
+          if (frame >= stepTimings[i].drawerOpenStart) { cardIdx = i; break; }
+        }
+        const cst = stepTimings[cardIdx];
+        const step = steps[cardIdx];
+
+        // For the first step, reveal starts at drawerOpenEnd (after the drawer finishes opening).
+        // For subsequent steps, reveal starts at that step's drawerOpenStart so the content
+        // swap feels instant — the drawer doesn't re-open, it just refreshes.
+        const revealStart = cardIdx === 0 ? cst.drawerOpenEnd : cst.drawerOpenStart;
+        const revealEnd = Math.min(revealStart + sec(1.3), cst.complete);
+        const revealProgress = interpolate(frame, [revealStart, revealEnd], [0, 1], clamp);
         const mosaicScale = interpolate(revealProgress, [0, 0.4, 0.8, 1], [0.04, 0.12, 0.45, 1]);
         const blurAmount = interpolate(revealProgress, [0, 0.4, 0.8, 1], [10, 5, 2, 0]);
 
-        // Completion: pulse + white fade + black checkmark
-        const completeRaw = frame >= cst.complete
+        // Per-step completion flash. For non-final steps, fade the overlay back out
+        // before the next step's content swaps in, so we don't carry the white flash
+        // into the new image.
+        const isLastStep = cardIdx === stepTimings.length - 1;
+        const nextStart = isLastStep ? Infinity : stepTimings[cardIdx + 1].drawerOpenStart;
+        const flashInRaw = frame >= cst.complete
           ? spring({ frame: frame - cst.complete, fps, config: { damping: 22, stiffness: 140 } })
           : 0;
-        const completeProgress = Math.min(1, Math.max(0, completeRaw));
+        const flashIn = Math.min(1, Math.max(0, flashInRaw));
+        const flashOut = isLastStep
+          ? 1
+          : interpolate(frame, [nextStart - sec(0.25), nextStart], [1, 0], clamp);
+        const completeProgress = flashIn * flashOut;
         const pulseElapsed = frame - cst.complete;
-        const completePulse = frame >= cst.complete
+        const completePulse = frame >= cst.complete && frame < nextStart
           ? 1 + 0.03 * Math.max(0, Math.sin(Math.min(pulseElapsed / fps, 0.4) / 0.4 * Math.PI))
           : 1;
 
         return (
           <div
-            key={i}
             style={{
               position: "absolute",
               left: cardLeft,
               top: cardTop,
               width: BOX_W,
               height: CARD_H,
-              // Clip so the card is hidden until the drawer opens
               overflow: "hidden",
               zIndex: 15,
             }}
@@ -179,7 +203,6 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
                 style={{
                   position: "absolute",
                   inset: 0,
-                  // Flat bottom — blends with prompt box top; rounded top corners
                   borderTopLeftRadius: BOX_R,
                   borderTopRightRadius: BOX_R,
                   borderBottomLeftRadius: 0,
@@ -197,6 +220,7 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
                 <div style={{ margin: "0 40px 24px", width: IMG_W, height: IMG_H, borderRadius: 12, overflow: "hidden", background: "#e5e7eb" }}>
                   <div style={{ width: IMG_W, height: IMG_H, overflow: "hidden" }}>
                     <Img
+                      key={cardIdx}
                       src={staticFile(step.image)}
                       style={{
                         width: Math.max(2, Math.round(IMG_W * mosaicScale)),
@@ -213,12 +237,22 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
                 <div style={{ padding: "28px 40px 12px", fontSize: 48, fontWeight: 600, color: LABEL_COLOR, letterSpacing: 4, textTransform: "uppercase" }}>
                   Textual Subgoal
                 </div>
-                <div style={{ padding: `0 40px ${CARD_BOTTOM_PAD}px`, fontSize: 56, fontWeight: 500, color: TEXT_COLOR, lineHeight: 1.25 }}>
+                <div style={{
+                  padding: `0 40px ${CARD_BOTTOM_PAD}px`,
+                  fontSize: TEXT_FONT_SIZE,
+                  fontWeight: 500,
+                  color: TEXT_COLOR,
+                  lineHeight: TEXT_LINE_HEIGHT,
+                  minHeight: TEXT_BLOCK_H,
+                  display: "-webkit-box",
+                  WebkitLineClamp: TEXT_MAX_LINES,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}>
                   "{step.prompt}"
                 </div>
               </div>
 
-              {/* Completion overlay: white fade + large black checkmark */}
               {completeProgress > 0 && (
                 <div
                   style={{
@@ -255,7 +289,7 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
             </div>
           </div>
         );
-      })}
+      })()}
 
       {/* === Prompt Box (bottom-left) === */}
       <div
