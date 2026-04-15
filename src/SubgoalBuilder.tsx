@@ -1,4 +1,5 @@
 import { AbsoluteFill, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { mmssToSec } from "./time";
 
 const FONT = "'Suisse Intl', Inter, -apple-system, Helvetica, Arial, sans-serif";
 
@@ -12,13 +13,14 @@ const LABEL_COLOR = "#6b7280";
 export type PromptFlowStep = {
   prompt: string;
   image: string;
-  typeStart: number; // seconds
-  complete: number;  // seconds — when the card turns blue + checkmark appears
+  typeStart: number; // mm.ss (e.g. 1.32 = 1m32s)
+  complete: number;  // mm.ss — when the card turns blue + checkmark appears
 };
 
 export type SubgoalBuilderProps = {
   steps: PromptFlowStep[];
-  fadeStart: number; // seconds
+  start: number; // mm.ss — absolute timestamp that maps to frame 0
+  end: number;   // mm.ss — absolute timestamp when fade-out begins
 };
 
 // Large-card (center) size
@@ -29,22 +31,26 @@ const IMG_H = Math.round(IMG_W * (9 / 16));
 const CARD_H = 36 + 48 + 18 + IMG_H + 24 + 1 + 28 + 56 + 56 + 72;
 const SMALL_SCALE = 0.45;
 
-export const SubgoalBuilder: React.FC<SubgoalBuilderProps> = ({ steps, fadeStart }) => {
+export const SubgoalBuilder: React.FC<SubgoalBuilderProps> = ({ steps, start, end }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
 
   const sec = (s: number) => Math.round(s * fps);
   const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
 
+  // Absolute mm.ss timestamps → frame offsets relative to `start` (frame 0).
+  const baseSec = mmssToSec(start);
+  const absFrame = (mmss: number) => sec(mmssToSec(mmss) - baseSec);
+
   // --- Per-step timings derived from scenario ---
   // Phases must be strictly monotonically increasing for interpolate(). If the
   // requested complete is too close to typeStart, push it out so all phases fit.
   const stepTimings = steps.map((s) => {
-    const typeStart = sec(s.typeStart);
+    const typeStart = absFrame(s.typeStart);
     const typeEnd = typeStart + sec(1.8);
     const enter = typeStart + sec(2.4);
     const cardIn = typeStart + sec(2.8);
-    const requested = sec(s.complete);
+    const requested = absFrame(s.complete);
     const window = Math.max(sec(1), requested - cardIn);
     const revealDur = Math.max(1, Math.min(sec(1.6), Math.round(window * 0.4)));
     const holdLargeDur = Math.max(1, Math.min(sec(0.9), Math.round(window * 0.2)));
@@ -56,7 +62,7 @@ export const SubgoalBuilder: React.FC<SubgoalBuilderProps> = ({ steps, fadeStart
     return { typeStart, typeEnd, enter, cardIn, cardRevealEnd, cardShrink, cardAtPosition, complete };
   });
 
-  const tFadeStart = sec(fadeStart);
+  const tFadeStart = absFrame(end);
   const tFadeEnd = tFadeStart + sec(1);
 
   // --- Active step for prompt box ---

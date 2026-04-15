@@ -1,24 +1,38 @@
-import { AbsoluteFill, Img, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { AbsoluteFill, Audio, Img, Sequence, interpolate, spring, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
+import { mmssToSec } from "./time";
 
 const FONT = "'Suisse Intl', Inter, -apple-system, Helvetica, Arial, sans-serif";
 
 const BOX_BG = "#ffffff";
 const BORDER = "rgba(0,0,0,0.10)";
-const BLUE = "#7dd3fc";
+const GREEN = "#22c55e";
 const PLACEHOLDER_COLOR = "rgba(0,0,0,0.30)";
 const TEXT_COLOR = "#1a1a1e";
 const LABEL_COLOR = "#6b7280";
 
+const KEYBOARD_SOUNDS = [
+  "Rapid,_chaotic_keybo_#1-1776185434981.wav",
+  "Rapid,_chaotic_keybo_#2-1776185368203.wav",
+  "Rapid,_chaotic_keybo_#3-1776185392391.wav",
+  "Rapid,_chaotic_keybo_#4-1776185414155.wav",
+];
+
+const ENTER_SOUNDS = ["enter1.wav", "enter2.wav", "enter3.wav"];
+
+// Deterministic pseudo-random pick per step index — stable across renders.
+const pickEnter = (i: number) => ENTER_SOUNDS[(i * 2654435761) % ENTER_SOUNDS.length];
+
 export type SubgoalBuilderV2Step = {
   prompt: string;
   image: string;
-  typeStart: number;
-  complete: number;
+  typeStart: number; // mm.ss (e.g. 1.32 = 1m32s)
+  complete: number;  // mm.ss
 };
 
 export type SubgoalBuilderV2Props = {
   steps: SubgoalBuilderV2Step[];
-  fadeStart: number;
+  start: number; // mm.ss — absolute timestamp that maps to frame 0
+  end: number;   // mm.ss — absolute timestamp when fade-out begins
 };
 
 // Prompt box + card share width; card stacks flush above the prompt box like a drawer.
@@ -38,12 +52,18 @@ const TEXT_BLOCK_H = Math.ceil(TEXT_FONT_SIZE * TEXT_LINE_HEIGHT) * TEXT_MAX_LIN
 // padding + label + gap + image + gap + divider + label + text + padding
 const CARD_H = 36 + 48 + 18 + IMG_H + 24 + 1 + 28 + 56 + TEXT_BLOCK_H + CARD_BOTTOM_PAD;
 
-export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeStart }) => {
+export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, start, end }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
 
   const sec = (s: number) => Math.round(s * fps);
   const clamp = { extrapolateLeft: "clamp" as const, extrapolateRight: "clamp" as const };
+
+  // Scenario timestamps are absolute on the full-video timeline; frame 0 of this
+  // composition maps to `start`. Convert any absolute mm.ss timestamp into a
+  // frame offset by subtracting the base.
+  const baseSec = mmssToSec(start);
+  const absFrame = (mmss: number) => sec(mmssToSec(mmss) - baseSec);
 
   // --- Per-step timings ---
   // Each step: type → enter → drawer opens → card visible → complete → drawer closes.
@@ -51,12 +71,12 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
   // Compressed so the image is fully revealed by typeStart + 3.0s:
   //   type 0.9s → enter 1.1s → drawerOpen 1.3s → drawerOpenEnd 1.7s → revealEnd 3.0s (1.3s window)
   const stepTimings = steps.map((s) => {
-    const typeStart = sec(s.typeStart);
+    const typeStart = absFrame(s.typeStart);
     const typeEnd = typeStart + sec(0.9);
     const enter = typeStart + sec(1.1);
     const drawerOpenStart = typeStart + sec(1.3);
     const drawerOpenEnd = drawerOpenStart + sec(0.4);
-    const requested = sec(s.complete);
+    const requested = absFrame(s.complete);
     const minComplete = drawerOpenEnd + sec(1.3);
     const complete = Math.max(requested, minComplete);
     const drawerCloseStart = complete + sec(0.9);
@@ -64,7 +84,7 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
     return { typeStart, typeEnd, enter, drawerOpenStart, drawerOpenEnd, complete, drawerCloseStart, drawerCloseEnd };
   });
 
-  const tFadeStart = sec(fadeStart);
+  const tFadeStart = absFrame(end);
   const tFadeEnd = tFadeStart + sec(1);
 
   // --- Active step for prompt box (latest typeStart ≤ frame) ---
@@ -75,16 +95,18 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
   const st = activeIdx >= 0 ? stepTimings[activeIdx] : null;
   const activePrompt = activeIdx >= 0 ? steps[activeIdx].prompt : "";
 
-  const showPlaceholder = activeIdx < 0;
+  const showPlaceholder = activeIdx < 0 || (st ? frame >= st.enter : false);
   const isTyping = st ? frame >= st.typeStart && frame < st.typeEnd : false;
   const hasTyped = st ? frame >= st.typeEnd : false;
   const isEntered = st ? frame >= st.enter : false;
   const isBlue = st ? frame >= st.enter : false;
+  const isGreen = isBlue;
+  const showEnterButton = st ? frame >= st.typeStart : false;
 
   const typeProgress = st ? interpolate(frame, [st.typeStart, st.typeEnd], [0, 1], clamp) : 0;
   const charsVisible = Math.floor(typeProgress * activePrompt.length);
   const typedText = activePrompt.slice(0, charsVisible);
-  const cursorOn = (isTyping || (hasTyped && !isEntered)) && Math.floor(frame / 4) % 2 === 0;
+  const cursorOn = (isTyping || hasTyped || showPlaceholder) && Math.floor(frame / 20) % 2 === 0;
 
   // One-time entrance slide
   const entranceY = spring({ frame, fps, config: { damping: 11, stiffness: 120, mass: 0.8 } });
@@ -105,7 +127,7 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
   const tickProgress = Math.min(1, Math.max(0, tickRaw));
 
   const promptBoxBg = colorShift > 0
-    ? `linear-gradient(135deg, rgba(125,211,252,${0.08 * colorShift}), rgba(125,211,252,${0.04 * colorShift})), ${BOX_BG}`
+    ? `linear-gradient(135deg, rgba(34,197,94,${0.08 * colorShift}), rgba(34,197,94,${0.04 * colorShift})), ${BOX_BG}`
     : BOX_BG;
 
   // --- Position: bottom-right ---
@@ -122,6 +144,24 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
 
   return (
     <AbsoluteFill style={{ fontFamily: FONT, opacity: finalFade }}>
+
+      {stepTimings.map((t, i) => (
+        <Sequence key={`kbd-${i}`} from={t.typeStart} durationInFrames={Math.max(1, t.typeEnd - t.typeStart)}>
+          <Audio src={staticFile(KEYBOARD_SOUNDS[i % KEYBOARD_SOUNDS.length])} volume={0.6} />
+        </Sequence>
+      ))}
+
+      {stepTimings.map((t, i) => (
+        <Sequence key={`enter-${i}`} from={t.typeEnd} durationInFrames={sec(1)}>
+          <Audio src={staticFile(pickEnter(i))} volume={0.7} />
+        </Sequence>
+      ))}
+
+      {stepTimings.map((t, i) => (
+        <Sequence key={`alert-${i}`} from={t.complete} durationInFrames={sec(2)}>
+          <Audio src={staticFile("alert.wav")} volume={0.8} />
+        </Sequence>
+      ))}
 
       {/* === Drawer: opens once, persists across steps; content swaps inside === */}
       {(() => {
@@ -311,23 +351,24 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
             inset: 0,
             borderRadius: BOX_R,
             background: promptBoxBg,
-            border: `2px solid ${isBlue ? `rgba(125,211,252,${0.4 * colorShift})` : BORDER}`,
+            border: `2px solid ${isGreen ? `rgba(34,197,94,${0.4 * colorShift})` : BORDER}`,
             boxShadow: "0 8px 40px rgba(0,0,0,0.2)",
           }}
         />
         <div style={{ position: "relative", height: "100%", display: "flex", alignItems: "center", padding: "0 52px", zIndex: 1 }}>
           {showPlaceholder && (
-            <span style={{ color: PLACEHOLDER_COLOR, fontSize: 60, fontStyle: "italic", fontWeight: 400 }}>
-              Type Prompt
+            <span style={{ fontSize: 60, display: "inline-flex", alignItems: "center" }}>
+              <span style={{ opacity: cursorOn ? 0.8 : 0, background: TEXT_COLOR, width: 3, height: 68, marginRight: 2 }} />
+              <span style={{ color: PLACEHOLDER_COLOR, fontStyle: "italic", fontWeight: 400 }}>Type Prompt</span>
             </span>
           )}
           {!showPlaceholder && (
-            <span style={{ color: isBlue ? BLUE : TEXT_COLOR, fontSize: 60, fontWeight: 500 }}>
+            <span style={{ color: TEXT_COLOR, fontSize: 60, fontWeight: 500, display: "inline-flex", alignItems: "center" }}>
               {typedText}
-              <span style={{ opacity: cursorOn ? 1 : 0, color: TEXT_COLOR, marginLeft: 4, fontWeight: 300 }}>▎</span>
+              <span style={{ opacity: cursorOn ? 0.8 : 0, background: TEXT_COLOR, width: 3, height: 68, marginLeft: 2 }} />
             </span>
           )}
-          {hasTyped && (
+          {showEnterButton && (
             <div
               style={{
                 position: "absolute",
@@ -337,19 +378,15 @@ export const SubgoalBuilderV2: React.FC<SubgoalBuilderV2Props> = ({ steps, fadeS
                 width: 120,
                 height: 120,
                 borderRadius: 48,
-                background: isBlue
-                  ? `linear-gradient(135deg, ${BLUE}, #38bdf8)`
-                  : isEntered
-                    ? "rgba(0,0,0,0.85)"
-                    : "rgba(0,0,0,0.5)",
+                background: isGreen
+                  ? `linear-gradient(135deg, ${GREEN}, #16a34a)`
+                  : "rgba(0,0,0,0.85)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: isBlue
-                  ? "0 0 40px rgba(125,211,252,0.4)"
-                  : isEntered
-                    ? "0 0 24px rgba(0,0,0,0.2)"
-                    : "none",
+                boxShadow: isGreen
+                  ? "0 0 40px rgba(34,197,94,0.4)"
+                  : "0 0 24px rgba(0,0,0,0.2)",
               }}
             >
               <svg width={48} height={48} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">

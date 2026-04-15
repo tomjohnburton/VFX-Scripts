@@ -1,0 +1,14 @@
+{
+  "name": "montage",
+  "composition": "PromptBuilderV1",
+  "start": 0.35,
+  "end": 0.53,
+  "steps": [
+    { "prompt": "peel fruits and vegetables", "typeStart": 0.35, "complete": 0.40 },
+        { "prompt": "slice vegetables", "typeStart": 0.42, "complete": 0.46 },
+
+            { "prompt": "take out the trash", "typeStart": 0.48, "complete": 0.52 }
+
+
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "assemble-windmill",
+  "composition": "PromptBuilderV1",
+  "start": 0.00,
+  "end": 0.06,
+  "steps": [
+    { "prompt": "assemble the windmill", "typeStart": 0.01, "complete": 0.05 }
+  ]
+}

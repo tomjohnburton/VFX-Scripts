@@ -1,0 +1,33 @@
+{
+  "name": "microwave",
+  "composition": "SubgoalBuilderV3",
+  "start": 0.53,
+  "end": 1.26,
+  "steps": [
+
+    {
+      "prompt": "open the microwave",
+      "image": "microwave/frames/base_01.jpg",
+      "typeStart": 0.54,
+      "complete": 0.59
+    },
+    {
+      "prompt": "pick up the plate of food in the microwave",
+      "image": "microwave/frames/right_04.jpg",
+      "typeStart": 1.00,
+      "complete": 1.07
+    },
+    {
+      "prompt": "put the plate with food on the dining table",
+      "image": "microwave/frames/right_06.jpg",
+      "typeStart": 1.09,
+      "complete": 1.16
+    },
+    {
+      "prompt": "close the microwave",
+      "image": "microwave/frames/base_08.jpg",
+      "typeStart": 1.18,
+      "complete": 1.24
+    }
+  ]
+}

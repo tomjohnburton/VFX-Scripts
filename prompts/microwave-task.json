@@ -1,0 +1,15 @@
+{
+  "name": "microwave-task",
+  "composition": "PromptBuilderV1",
+  "start": 0.00,
+  "end": 0.36,
+  "steps": [
+    { "prompt": "push the open button on the microwave",      "typeStart": 0.01, "complete": 0.05 },
+    { "prompt": "open the microwave",                          "typeStart": 0.06, "complete": 0.10 },
+    { "prompt": "pick up the plate of food in the microwave",  "typeStart": 0.11, "complete": 0.15 },
+    { "prompt": "move to the dining table",                    "typeStart": 0.16, "complete": 0.20 },
+    { "prompt": "put the plate with food on the dining table", "typeStart": 0.21, "complete": 0.25 },
+    { "prompt": "move to the microwave",                       "typeStart": 0.26, "complete": 0.30 },
+    { "prompt": "close the microwave",                         "typeStart": 0.31, "complete": 0.35 }
+  ]
+}

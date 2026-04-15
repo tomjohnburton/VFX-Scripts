@@ -1,37 +1,38 @@
 {
   "name": "airfryer",
-  "composition": "SubgoalBuilderV2",
+  "composition": "SubgoalBuilderV3",
+  "start": 2.04,
+  "end": 2.33,
   "steps": [
     {
-      "prompt": "Grasp the handle of the air fryer with the left gripper",
-      "image": "sweet_potato_grasp_handle.jpg",
-      "typeStart": 1,
-      "complete": 5
+      "prompt": "grasp the handle of the air fryer with the left gripper",
+      "image": "airfryer/frames/left_00.jpg",
+      "typeStart": 2.05,
+      "complete": 2.10
     },
     {
-      "prompt": "Open the air fryer",
-      "image": "sweet_potato_air_fryer_open.jpg",
-      "typeStart": 6,
-      "complete": 10
+      "prompt": "open the air fryer with the left gripper",
+      "image": "airfryer/frames/left_01.jpg",
+      "typeStart": 2.11,
+      "complete": 2.17
     },
     {
-      "prompt": "Pick up the sweet potato with the right gripper",
-      "image": "sweet_potato_right_gripper.jpg",
-      "typeStart": 13,
-      "complete": 21
+      "prompt": "pick up one sweet potato with the right gripper",
+      "image": "airfryer/frames/right_02.jpg",
+      "typeStart": 2.18,
+      "complete": 2.21
     },
     {
-      "prompt": "Place the sweet potato in the air fryer",
-      "image": "sweet_potato_in_air_fryer.jpg",
-      "typeStart": 22,
-      "complete": 28
+      "prompt": "put sweet potato into air fryer",
+      "image": "airfryer/frames/right_03.jpg",
+      "typeStart": 2.22,
+      "complete": 2.26
     },
     {
-      "prompt": "Close the air fryer",
-      "image": "sweet_potato_air_fryer_close.jpg",
-      "typeStart": 29,
-      "complete": 36
+      "prompt": "close the air fryer",
+      "image": "airfryer/frames/left_04.jpg",
+      "typeStart": 2.27,
+      "complete": 2.32
     }
-  ],
-  "fadeStart": 38
+  ]
 }

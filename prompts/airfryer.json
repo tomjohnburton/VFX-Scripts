@@ -1,0 +1,13 @@
+{
+  "name": "airfryer",
+  "composition": "PromptBuilderV1",
+  "start": 0.00,
+  "end": 0.26,
+  "steps": [
+    { "prompt": "grasp the handle of the air fryer with the left gripper", "typeStart": 0.01, "complete": 0.05 },
+    { "prompt": "open the air fryer with the left gripper",                "typeStart": 0.06, "complete": 0.10 },
+    { "prompt": "pick up one sweet potato with the right gripper",         "typeStart": 0.11, "complete": 0.15 },
+    { "prompt": "put sweet potato into air fryer",                         "typeStart": 0.16, "complete": 0.20 },
+    { "prompt": "close the air fryer",                                     "typeStart": 0.21, "complete": 0.25 }
+  ]
+}
